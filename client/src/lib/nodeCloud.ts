@@ -86,6 +86,9 @@ const RULES = [
   ["doc", /write|essay|proposal|letter|report|minutes|doc|draft|article|summary|plan/],
 ];
 
+/** The tool id a typed request should open in; documents when nothing matches. */
+export const routeTool = (q: string): string => RULES.find(([, re]) => re.test(q.toLowerCase()))?.[0] ?? "doc";
+
 const ago = (t) => {
   const s = Math.round((Date.now() - t) / 1000);
   if (s < 60) return "just now";
@@ -495,11 +498,7 @@ export function mountNodeCloud(stage: HTMLElement, opts: CloudOptions): () => vo
   }
 
   // the prompt box: pick the tool as you type, then start a new file there with the request
-  const pickTool = (q) => {
-    q = q.toLowerCase();
-    const r = RULES.find(([, re]) => re.test(q));
-    return r ? byId[r[0]] : byId.doc;
-  };
+  const pickTool = (q) => byId[routeTool(q)];
   function showRoute(going) {
     const q = aski.value.trim();
     routed = q ? pickTool(q) : null;

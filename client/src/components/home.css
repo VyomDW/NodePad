@@ -1,0 +1,74 @@
+/* Home: tool sidebar + file list on the paper-and-ink desk. Scoped to .hm; data-theme picks light or dark. */
+.hm{--desk:#f6f5ef;--desk-grid:#e9e7de;--live:#047857;--del:#dc2626;background:var(--page);color:var(--ink)}
+.hm[data-theme="dark"]{--page:#151412;--panel:#1e1d1a;--line:#36342e;--ink:#eeece4;--dim:#a8a69b;--orb:#f97316;--orb-ink:#1c1b18;
+  --desk:#191815;--desk-grid:#24231f;--live:#34d399;--del:#f87171;color-scheme:dark}
+.hm[data-theme="dark"] ::selection{background:rgb(234 88 12 / .45)}
+
+.hm .ghost{display:flex;align-items:center;gap:6px;min-height:36px;min-width:36px;justify-content:center;padding:0 10px;border-radius:8px;border:0;background:none;color:var(--dim);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.hm .ghost:hover{background:var(--desk);color:var(--ink)}
+.hm button:focus-visible,.hm a:focus-visible,.hm input:focus-visible{outline:2px solid var(--orb);outline-offset:2px}
+
+.hm .body{flex:1;min-height:0;display:flex}
+.hm .side{width:268px;flex:none;overflow-y:auto;padding:18px 14px 24px;border-right:1.5px solid var(--line);background:var(--desk);display:flex;flex-direction:column;gap:2px}
+.hm .newbtn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;margin-bottom:12px;border-radius:10px;border:1.5px solid var(--ink);background:var(--ink);color:var(--page);box-shadow:3px 3px 0 var(--orb);font:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:transform .08s ease,box-shadow .08s ease}
+.hm .newbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--orb)}
+.hm .grp{display:flex;flex-direction:column;gap:2px}
+.hm .hand{font-family:"Caveat",cursive;font-weight:700;font-size:22px;color:var(--dim);line-height:1;padding:14px 10px 6px}
+.hm .ic{display:grid;place-items:center;flex:none;border-radius:7px;border:1.5px solid var(--ink);color:#fff}
+.hm .ic svg{width:58%;height:58%}
+.hm .tool{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:6px 10px;border-radius:10px;border:1.5px solid transparent;background:none;color:var(--ink);font:inherit;font-size:14px;font-weight:600;text-align:left;cursor:pointer}
+.hm .tool:hover{background:var(--panel);border-color:var(--ink);box-shadow:2px 2px 0 var(--c,var(--orb))}
+.hm .tool.on{background:var(--panel);border-color:var(--ink);box-shadow:3px 3px 0 var(--orb)}
+.hm .tool .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm .tool .ct{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;color:var(--dim)}
+
+.hm .main{flex:1;min-width:0;overflow-y:auto;padding:28px 40px 48px;background-color:var(--desk);
+  background-image:linear-gradient(var(--desk-grid) 1px,transparent 1px),linear-gradient(90deg,var(--desk-grid) 1px,transparent 1px);background-size:28px 28px}
+.hm .wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+
+.hm .ask{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 16px;border-radius:14px;background:var(--panel);border:1.5px solid var(--ink);box-shadow:3px 3px 0 var(--ink)}
+.hm .ask:focus-within{box-shadow:3px 3px 0 var(--orb)}
+.hm .ask input{flex:1;min-width:0;min-height:40px;border:0;outline:0;background:transparent;font:inherit;font-size:15px;color:var(--ink)}
+.hm .ask input::placeholder{color:var(--dim)}
+.hm .ask .go{flex:none;width:40px;height:40px;display:grid;place-items:center;border-radius:10px;border:1.5px solid var(--ink);background:var(--orb);color:#fff;cursor:pointer}
+.hm .ask .go:disabled{opacity:.4;cursor:default}
+.hm .route{margin:-6px 0 0 4px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
+.hm .route .rt{display:inline-flex;align-items:center;gap:6px;padding:2px 8px 2px 3px;border-radius:8px;border:1.5px solid var(--ink);background:var(--panel);box-shadow:2px 2px 0 var(--c);font-weight:700;color:var(--ink)}
+
+.hm .head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 12px;margin-top:6px}
+.hm .head h1{margin:0;font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.15}
+.hm .head .text-dim{font-size:14px;padding-bottom:4px}
+.hm .chip{min-height:34px;padding:0 12px;border-radius:8px;border:1.5px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.hm .chip.on{border-color:var(--ink);box-shadow:2px 2px 0 var(--ink)}
+
+.hm .table{border-radius:12px;overflow:hidden;background:var(--panel);border:1.5px solid var(--ink);box-shadow:3px 3px 0 var(--ink)}
+.hm .row{position:relative;display:grid;grid-template-columns:30px minmax(0,1fr) 150px 120px 100px 36px;align-items:center;gap:14px;padding:9px 14px;border-bottom:1.5px solid var(--line)}
+.hm .row:last-child{border-bottom:0}
+.hm .row:not(.th):hover{background:var(--desk);box-shadow:inset 3px 0 0 var(--c)}
+.hm .row.th{padding-block:9px;border-bottom-color:var(--ink);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.hm .row .nm{font-size:15px;font-weight:600;color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm .row .nm::after{content:"";position:absolute;inset:0}
+.hm .row .sub{font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hm .row .live{font-size:13px;font-weight:600;color:var(--live);white-space:nowrap}
+.hm .row .del{position:relative;z-index:1;width:34px;height:34px;display:grid;place-items:center;border-radius:8px;border:1.5px solid transparent;background:none;color:var(--dim);cursor:pointer;opacity:0;transition:opacity .12s ease}
+.hm .row:hover .del,.hm .row .del:focus-visible{opacity:1}
+.hm .row .del:hover{border-color:var(--del);color:var(--del)}
+@media (hover:none){.hm .row .del{opacity:1}}
+.hm .empty{margin:0;padding:28px 16px;display:grid;justify-items:center;gap:12px;text-align:center;color:var(--dim);font-size:14px}
+.hm .empty p{margin:0}
+.hm .more{align-self:flex-start;min-height:36px;padding:0 4px;border:0;background:none;color:var(--ink);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.hm .more:hover{color:var(--orb)}
+
+/* Phones: the sidebar becomes a scrolling strip of tools above the list. */
+@media (max-width:760px){
+  .hm .body{flex-direction:column;overflow-y:auto}
+  .hm .side{width:auto;flex-direction:row;align-items:center;overflow-x:auto;overflow-y:visible;padding:10px 16px;gap:6px;border-right:0;border-bottom:1.5px solid var(--line)}
+  .hm .newbtn{margin:0;padding:0 14px;flex:none;white-space:nowrap}
+  .hm .grp{flex-direction:row;gap:6px}
+  .hm .hand{display:none}
+  .hm .tool{width:auto;flex:none;white-space:nowrap}
+  .hm .tool .ct{display:none}
+  .hm .main{overflow:visible;padding:20px 16px 40px}
+  .hm .row{grid-template-columns:30px minmax(0,1fr) auto 36px}
+  .hm .row .opt{display:none}
+}
