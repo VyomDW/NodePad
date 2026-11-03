@@ -1,6 +1,8 @@
 import { useEffect, useRef, type CSSProperties } from "react";
+import { Moon, Sun } from "lucide-react";
 import { DEV_DEFS, iconSvg, MEDIA_DEFS, TOOL_DEFS } from "@/lib/nodeCloud";
 import { mountLanding } from "@/lib/landingScene";
+import { useTheme } from "@/lib/theme";
 import { Logo } from "./Logo";
 import "./landing.css";
 
@@ -37,6 +39,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const enter = useRef(onEnter);
   enter.current = onEnter;
+  const [theme, toggleTheme] = useTheme();
 
   useEffect(() => {
     document.title = "nodepad";
@@ -44,7 +47,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   }, []);
 
   return (
-    <div ref={root} className="lp">
+    <div ref={root} className="lp" data-theme={theme}>
       <div className="progress" aria-hidden />
       <div className="hero" id="top">
         <nav className="top" aria-label="Main">
@@ -57,6 +60,15 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
               <a href="#tools">Tools</a>
               <a href="#how">How it works</a>
             </div>
+            <button
+              type="button"
+              className="theme"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              title={theme === "dark" ? "Light mode" : "Dark mode"}
+            >
+              {theme === "dark" ? <Sun /> : <Moon />}
+            </button>
             <GoNode small />
           </div>
         </nav>
@@ -216,9 +228,9 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
               </div>
               <GoNode />
               <svg className="mark" viewBox="0 0 32 32" aria-hidden>
-                <path d="M10 23V15a6 6 0 0 1 12 0v8" fill="none" stroke="#1c1b18" strokeWidth="2.6" strokeLinecap="round" />
-                <circle cx="10" cy="23" r="2.8" fill="#1c1b18" />
-                <circle cx="22" cy="23" r="2.8" fill="#1c1b18" />
+                <path d="M10 23V15a6 6 0 0 1 12 0v8" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+                <circle cx="10" cy="23" r="2.8" fill="currentColor" />
+                <circle cx="22" cy="23" r="2.8" fill="currentColor" />
               </svg>
             </div>
           </div>

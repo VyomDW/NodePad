@@ -7,8 +7,13 @@ export interface LandingOptions {
   onEnter: () => void;
 }
 
-const INK = "#1c1b18";
 const FLOOR = -2.7;
+
+/** Scene colors per theme, matching the page's light and dark tokens in landing.css. */
+const PALETTES = {
+  light: { desk: "#f6f5ef", fine: 0xe4e1d6, bold: 0xd6d3c6, paper: 0xfffefb, ink: "#1c1b18", foot: 0x2a2925, shadow: 0xdcd9cd },
+  dark: { desk: "#191815", fine: 0x24231f, bold: 0x2e2c27, paper: 0x2b2a26, ink: "#eeece4", foot: 0xeeece4, shadow: 0x0f0e0c },
+};
 
 /** Builds the landing hero's 3D scene and the scroll reveals inside `root`, and returns a cleanup function. */
 export function mountLanding(root: HTMLElement, opts: LandingOptions): () => void {
@@ -104,10 +109,12 @@ export function mountLanding(root: HTMLElement, opts: LandingOptions): () => voi
   hero.insertBefore(renderer.domElement, hero.firstChild);
   const disposables = [];
 
-  const DESK = new THREE.Color("#f6f5ef");
+  // Follows the root's data-theme; applyTheme below recolors everything when it flips.
+  const paletteOf = () => PALETTES[root.dataset.theme === "dark" ? "dark" : "light"];
+  let pal = paletteOf();
   const scene = new THREE.Scene();
-  scene.background = DESK;
-  scene.fog = new THREE.Fog(DESK, 12, 30);
+  scene.background = new THREE.Color(pal.desk);
+  scene.fog = new THREE.Fog(pal.desk, 12, 30);
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
   const world = new THREE.Group();
   scene.add(world);
@@ -126,7 +133,7 @@ export function mountLanding(root: HTMLElement, opts: LandingOptions): () => voi
   const floorLines = (() => {
     const fine = [], bold = [], N = 40, S = 0.7;
     for (let i = -N; i <= N; i++) (i % 5 === 0 ? bold : fine).push(i * S, 0, -N * S, i * S, 0, N * S, -N * S, 0, i * S, N * S, 0, i * S);
-    return [[fine, 0xe4e1d6], [bold, 0xd6d3c6]].map(([a, c]) => {
+    return [[fine, pal.fine], [bold, pal.bold]].map(([a, c]) => {
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.Float32BufferAttribute(a, 3));
       const m = new THREE.LineBasicMaterial({ color: c });
@@ -152,8 +159,8 @@ export function mountLanding(root: HTMLElement, opts: LandingOptions): () => voi
   const SEG = 220, RAD = 24, TR = 1.3 * S, NR = 2.8 * S;
   const tubeG = new THREE.TubeGeometry(curve, SEG, TR, RAD, false);
   const hullG = new THREE.TubeGeometry(curve, SEG, TR + 0.07, RAD, false);
-  const paperMat = new THREE.MeshToonMaterial({ color: 0xfffefb, gradientMap: grad });
-  const inkMat = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
+  const paperMat = new THREE.MeshToonMaterial({ color: pal.paper, gradientMap: grad });
+  const inkMat = new THREE.MeshBasicMaterial({ color: pal.ink, side: THREE.BackSide });
   disposables.push(tubeG, hullG, paperMat, inkMat);
   const nGroup = new THREE.Group();
   world.add(nGroup);
@@ -171,12 +178,12 @@ export function mountLanding(root: HTMLElement, opts: LandingOptions): () => voi
     nGroup.add(g);
     return g;
   };
-  const footL = node(0x2a2925, P(10, 23)), footR = node(0xea580c, P(22, 23));
+  const footL = node(pal.foot, P(10, 23)), footR = node(0xea580c, P(22, 23));
 
   // flat hard shadow on the desk, projected along the light; the grid draws over it so the paper shows through
   const Ld = new THREE.Vector3(-0.35, -1, -0.45), h = FLOOR - 0.01;
   const proj = new THREE.Matrix4().set(1, -Ld.x / Ld.y, 0, (Ld.x / Ld.y) * h, 0, 0, 0, h, 0, -Ld.z / Ld.y, 1, (Ld.z / Ld.y) * h, 0, 0, 0, 1);
-  const shMat = new THREE.MeshBasicMaterial({ color: 0xdcd9cd, side: THREE.DoubleSide });
+  const shMat = new THREE.MeshBasicMaterial({ color: pal.shadow, side: THREE.DoubleSide });
   disposables.push(shMat);
   const shadows = [hull, footL.children[1], footR.children[1]].map((mesh) => {
     const s = new THREE.Mesh(mesh.geometry, shMat);
@@ -187,28 +194,36 @@ export function mountLanding(root: HTMLElement, opts: LandingOptions): () => voi
   });
 
   // ---- tool stickers: flat fill, ink outline, hard ink shadow (same textures as the home screen) ----
+  // Each sticker keeps its canvas so a theme change can redraw the ink outline and shadow in place.
+  const stickers = [];
   function sticker(fill, icon, o = {}) {
     const c = document.createElement("canvas");
     c.width = c.height = 256;
-    const g = c.getContext("2d");
-    const cx = 120, cy = 120, r = o.r || 92, sh = o.shadow ?? 12;
-    if (sh) {
-      g.fillStyle = INK;
-      g.beginPath(); g.arc(cx + sh, cy + sh, r, 0, 7); g.fill();
-    }
-    g.fillStyle = fill;
-    g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill();
-    g.lineWidth = o.line || 7; g.strokeStyle = INK; g.stroke();
-    if (icon) {
-      const s = 4.2;
-      g.save(); g.translate(cx - 12 * s, cy - 12 * s); g.scale(s, s);
-      g.strokeStyle = "#fff"; g.lineWidth = 2; g.lineCap = "round"; g.lineJoin = "round";
-      g.stroke(new Path2D(ICON[icon])); g.restore();
-    }
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4;
     disposables.push(t);
+    const draw = () => {
+      const g = c.getContext("2d");
+      g.clearRect(0, 0, c.width, c.height);
+      const cx = 120, cy = 120, r = o.r || 92, sh = o.shadow ?? 12;
+      if (sh) {
+        g.fillStyle = pal.ink;
+        g.beginPath(); g.arc(cx + sh, cy + sh, r, 0, 7); g.fill();
+      }
+      g.fillStyle = fill;
+      g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill();
+      g.lineWidth = o.line || 7; g.strokeStyle = pal.ink; g.stroke();
+      if (icon) {
+        const s = 4.2;
+        g.save(); g.translate(cx - 12 * s, cy - 12 * s); g.scale(s, s);
+        g.strokeStyle = "#fff"; g.lineWidth = 2; g.lineCap = "round"; g.lineJoin = "round";
+        g.stroke(new Path2D(ICON[icon])); g.restore();
+      }
+      t.needsUpdate = true;
+    };
+    draw();
+    stickers.push(draw);
     return t;
   }
   function sprite(tex) {
@@ -216,7 +231,7 @@ export function mountLanding(root: HTMLElement, opts: LandingOptions): () => voi
     disposables.push(m);
     return new THREE.Sprite(m);
   }
-  const blobMat = new THREE.MeshBasicMaterial({ color: 0xdcd9cd });
+  const blobMat = new THREE.MeshBasicMaterial({ color: pal.shadow });
   const blobG = new THREE.CircleGeometry(0.36, 24);
   disposables.push(blobMat, blobG);
   const RINGS = [
@@ -252,9 +267,29 @@ export function mountLanding(root: HTMLElement, opts: LandingOptions): () => voi
   // wires from the orange foot to every tool, rebuilt each frame
   const wpos = new Float32Array(ALL.length * 6), wg = new THREE.BufferGeometry();
   wg.setAttribute("position", new THREE.BufferAttribute(wpos, 3));
-  const wireMat = new THREE.LineBasicMaterial({ color: 0x1c1b18, transparent: true, opacity: 0.3, fog: false });
+  const wireMat = new THREE.LineBasicMaterial({ color: pal.ink, transparent: true, opacity: 0.3, fog: false });
   disposables.push(wg, wireMat);
   world.add(new THREE.LineSegments(wg, wireMat));
+
+  function applyTheme() {
+    const next = paletteOf();
+    if (next === pal) return;
+    pal = next;
+    scene.background.set(pal.desk);
+    scene.fog.color.set(pal.desk);
+    floorLines[0].material.color.set(pal.fine);
+    floorLines[1].material.color.set(pal.bold);
+    paperMat.color.set(pal.paper);
+    inkMat.color.set(pal.ink);
+    footL.children[0].material.color.set(pal.foot);
+    shMat.color.set(pal.shadow);
+    blobMat.color.set(pal.shadow);
+    wireMat.color.set(pal.ink);
+    stickers.forEach((draw) => draw());
+  }
+  const themeWatch = new MutationObserver(applyTheme);
+  themeWatch.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  cleanups.push(() => themeWatch.disconnect());
 
   // ---- state ----
   const t0 = performance.now();

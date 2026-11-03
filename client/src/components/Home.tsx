@@ -3,6 +3,7 @@ import type { BoardTemplate, DocKind } from "@hacktx/shared";
 import { ArrowUp, Clock, LogOut, Moon, Plus, Sun, Trash2 } from "lucide-react";
 import { api, signOut, useAuth } from "@/lib/auth";
 import { newRoomId, roomUrl, TARGETS } from "@/lib/kinds";
+import { useTheme } from "@/lib/theme";
 import { DEV_DEFS, ICON, MEDIA_DEFS, routeTool, TOOL_DEFS } from "@/lib/nodeCloud";
 import { Logo } from "./Logo";
 import "./home.css";
@@ -27,7 +28,6 @@ const GROUPS: { name: string; tools: Tool[] }[] = [
 const TOOLS: Record<string, Tool> = Object.fromEntries(GROUPS.flatMap((g) => g.tools).map((t) => [t.id, t]));
 /** How many files show before "All N files" expands the list. */
 const PREVIEW = 8;
-const THEME_KEY = "nodepad-theme";
 
 const toolOf = (f: FileInfo) => {
   const id = f.kind === "board" ? (f.template ?? "whiteboard") : f.kind;
@@ -50,26 +50,6 @@ function ToolIcon({ id, color, size = 26 }: { id: string; color: string; size?: 
       </svg>
     </span>
   );
-}
-
-/** Light or dark, from the saved choice or else the system setting. */
-function useTheme() {
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
-    try {
-      const saved = localStorage.getItem(THEME_KEY);
-      if (saved === "light" || saved === "dark") return saved;
-    } catch {}
-    return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  });
-  const toggle = () =>
-    setTheme((t) => {
-      const next = t === "dark" ? "light" : "dark";
-      try {
-        localStorage.setItem(THEME_KEY, next);
-      } catch {}
-      return next;
-    });
-  return [theme, toggle] as const;
 }
 
 /** Workspace home: tools down the side, your files in a list, and a prompt box to start something new. */
