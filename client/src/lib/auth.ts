@@ -77,6 +77,19 @@ export async function resendCode(email: string) {
   if (!res.ok) throw new Error(data.error || "Something went wrong. Try again.");
 }
 
+/** Forgot password: emails a reset code if an account uses this address. */
+export async function forgotPassword(email: string) {
+  const res = await api("/auth/forgot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) throw new Error(data.error || "Something went wrong. Try again.");
+}
+
+/** The reset code plus a new password signs in; sessions from before the reset end. */
+export async function resetPassword(email: string, code: string, password: string) {
+  const { account, token } = await accountCall("/auth/reset", { email, code, password });
+  setSession(account!, token);
+}
+
 function setSession(account: Account, token?: string) {
   writeToken(token);
   useAuth.setState({ token, account, status: "ready" });

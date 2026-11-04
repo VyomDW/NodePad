@@ -5,7 +5,8 @@ import websocket from "@fastify/websocket";
 import { ClientMessage } from "@hacktx/shared";
 import { env } from "./env";
 import { diagnoseMuse } from "./integrations/muse";
-import { accountOf, Credentials, Registration, rename, renewSession, requireAccount, resendCode, signIn, signOut, signUp, tokenOf, Verification, verify } from "./auth";
+import { accountOf, Credentials, forgotPassword, PasswordReset, Registration, rename, renewSession, requireAccount, resendCode, resetPassword, signIn, signOut, signUp, tokenOf, Verification, verify } from "./auth";
+import { diagnoseEmail } from "./integrations/email";
 import { admit, deleteRoom, findRoom, getRoom, listRooms, revokeAccess, type Room } from "./rooms/room";
 import { removeSaved } from "./rooms/store";
 import { transcribe, transcribeTurns } from "./integrations/voice";
@@ -36,9 +37,12 @@ app.get("/health", async () => ({ ok: true }));
 /** Can this server reach the AI? Key fingerprint, models visible from here, and a tiny test call per model. */
 app.get("/health/ai", async () => diagnoseMuse());
 
+/** Can this server send sign-up and reset codes? The email mode and, for SMTP, whether its login works. */
+app.get("/health/email", async () => diagnoseEmail());
+
 /**
- * Accounts: sign up (emails a code), verify the code, sign in, who am I, rename, sign out. Responses that sign
- * someone in carry the session token the browser keeps.
+ * Accounts: sign up (emails a code), verify the code, forgot and reset password, sign in, who am I, rename,
+ * sign out. Responses that sign someone in carry the session token the browser keeps.
  */
 const firstIssue = (error: { issues: { message: string }[] }) => error.issues[0]?.message ?? "Check your details.";
 
@@ -63,6 +67,22 @@ app.post<{ Body: { email?: string } }>("/auth/resend", async (req, reply) => {
   if (!email) return reply.code(400).send({ error: "Enter your email." });
   const result = await resendCode(email);
   if ("error" in result) return reply.code(429).send({ error: result.error });
+  return result;
+});
+
+app.post<{ Body: { email?: string } }>("/auth/forgot", async (req, reply) => {
+  const email = req.body?.email?.trim().toLowerCase();
+  if (!email) return reply.code(400).send({ error: "Enter your email." });
+  const result = await forgotPassword(email);
+  if ("error" in result) return reply.code(429).send({ error: result.error });
+  return { ok: true };
+});
+
+app.post<{ Body: unknown }>("/auth/reset", async (req, reply) => {
+  const input = PasswordReset.safeParse(req.body);
+  if (!input.success) return reply.code(400).send({ error: firstIssue(input.error) });
+  const result = await resetPassword(input.data);
+  if ("error" in result) return reply.code(400).send({ error: result.error });
   return result;
 });
 

@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { sendEmail, verificationEmail } from "./integrations/email";
+import { emailMode, resetEmail, sendEmail, verificationEmail, type Email as EmailMessage } from "./integrations/email";
 
 /**
  * Accounts and sign-in sessions.
@@ -16,11 +16,13 @@ import { sendEmail, verificationEmail } from "./integrations/email";
  * integration sets KV_REST_API_URL / KV_REST_API_TOKEN), so they survive containers too; otherwise in data/auth.json.
  *
  * Sign-up is two steps: the details wait as a pending registration while a 6-digit code goes to the email, and
- * the account only exists once that code comes back. Each successful /auth/me hands out a fresh token, so a
- * device that keeps using nodepad stays signed in.
+ * the account only exists once that code comes back. A forgotten password works the same way: a code to the
+ * account's email, then a new password, which also ends every session started before it. Each successful
+ * /auth/me hands out a fresh token, so a device that keeps using nodepad stays signed in.
  */
 const FILE = path.resolve(process.env.AUTH_FILE || "data/auth.json");
 const SESSION_DAYS = 30;
+const SESSION_MS = SESSION_DAYS * 86_400_000;
 const CODE_MINUTES = 10;
 const CODE_TRIES = 5;
 const RESEND_SECONDS = 30;
@@ -45,21 +47,19 @@ const User = z.object({
   createdAt: z.number(),
   /** Verified at sign-up; accounts made before email verification have none. */
   email: z.string().optional(),
+  /** When the password last changed; sessions started before it are no longer accepted. */
+  passwordAt: z.number().optional(),
 });
 type User = z.infer<typeof User>;
-const Pending = z.object({
-  email: z.string(),
-  username: z.string(),
-  name: z.string(),
-  salt: z.string(),
-  hash: z.string(),
-  codeHash: z.string(),
-  expires: z.number(),
-  tries: z.number(),
-  sentAt: z.number(),
-});
+/** A 6-digit code waiting to be entered, stored only as a hash. */
+const Code = z.object({ email: z.string(), codeHash: z.string(), expires: z.number(), tries: z.number(), sentAt: z.number() });
+type Code = z.infer<typeof Code>;
+/** A sign-up waiting for its email code. */
+const Pending = Code.extend({ username: z.string(), name: z.string(), salt: z.string(), hash: z.string() });
 type Pending = z.infer<typeof Pending>;
-const Store = z.object({ users: z.array(User).default([]), pending: z.array(Pending).default([]) }).passthrough();
+const Store = z
+  .object({ users: z.array(User).default([]), pending: z.array(Pending).default([]), resets: z.array(Code).default([]) })
+  .passthrough();
 
 export interface Account {
   id: string;
@@ -87,21 +87,20 @@ async function kv(...command: string[]): Promise<unknown> {
 }
 const userKey = (username: string) => `nodepad:user:${username}`;
 const emailKey = (email: string) => `nodepad:email:${email}`;
-const pendingKey = (email: string) => `nodepad:pending:${email}`;
 
 function loadFile(): z.infer<typeof Store> {
   try {
     return Store.parse(JSON.parse(readFileSync(FILE, "utf8")));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") console.warn("[auth] could not read accounts, starting empty", err);
-    return { users: [], pending: [] };
+    return { users: [], pending: [], resets: [] };
   }
 }
-const file = useKv ? { users: [], pending: [] } : loadFile();
+const file = useKv ? { users: [], pending: [], resets: [] } : loadFile();
 function saveFile() {
   mkdirSync(path.dirname(FILE), { recursive: true });
   const tmp = `${FILE}.tmp`;
-  writeFileSync(tmp, JSON.stringify({ users: file.users, pending: file.pending }));
+  writeFileSync(tmp, JSON.stringify({ users: file.users, pending: file.pending, resets: file.resets }));
   renameSync(tmp, FILE);
 }
 
@@ -134,23 +133,31 @@ async function saveUser(user: User) {
   else saveFile();
 }
 
-async function findPending(email: string): Promise<Pending | undefined> {
-  if (!useKv) return file.pending.find((p) => p.email === email);
-  const raw = await kv("GET", pendingKey(email));
-  return typeof raw === "string" ? Pending.parse(JSON.parse(raw)) : undefined;
+/** Outstanding codes of one kind (sign-ups or password resets), one per email, kept for a day at most. */
+function codeStore<T extends Code>(kind: "pending" | "resets", schema: z.ZodType<T>) {
+  const key = (email: string) => `nodepad:${kind}:${email}`;
+  const list = () => file[kind] as T[];
+  return {
+    async find(email: string): Promise<T | undefined> {
+      if (!useKv) return list().find((c) => c.email === email);
+      const raw = await kv("GET", key(email));
+      return typeof raw === "string" ? schema.parse(JSON.parse(raw)) : undefined;
+    },
+    async save(code: T) {
+      if (useKv) return void (await kv("SET", key(code.email), JSON.stringify(code), "EX", String(86_400)));
+      // Expired codes are dropped whenever the file is written.
+      (file[kind] as T[]) = [...list().filter((c) => c.email !== code.email && c.expires > Date.now() - 86_400_000), code];
+      saveFile();
+    },
+    async drop(email: string) {
+      if (useKv) return void (await kv("DEL", key(email)));
+      (file[kind] as T[]) = list().filter((c) => c.email !== email);
+      saveFile();
+    },
+  };
 }
-async function savePending(pending: Pending) {
-  if (useKv) return void (await kv("SET", pendingKey(pending.email), JSON.stringify(pending), "EX", String(86_400)));
-  // Expired registrations are dropped whenever the file is written.
-  file.pending = file.pending.filter((p) => p.email !== pending.email && p.expires > Date.now() - 86_400_000);
-  file.pending.push(pending);
-  saveFile();
-}
-async function dropPending(email: string) {
-  if (useKv) return void (await kv("DEL", pendingKey(email)));
-  file.pending = file.pending.filter((p) => p.email !== email);
-  saveFile();
-}
+const pendings = codeStore("pending", Pending);
+const resets = codeStore("resets", Code);
 
 // ---- Sessions: signed, self-contained tokens ----
 
@@ -158,7 +165,7 @@ const Payload = z.object({ id: z.string(), username: z.string(), name: z.string(
 const sign = (body: string) => createHmac("sha256", SECRET).update(body).digest("base64url");
 
 function startSession(account: Account) {
-  const body = Buffer.from(JSON.stringify({ ...account, exp: Date.now() + SESSION_DAYS * 86_400_000 })).toString("base64url");
+  const body = Buffer.from(JSON.stringify({ ...account, exp: Date.now() + SESSION_MS })).toString("base64url");
   return `${body}.${sign(body)}`;
 }
 
@@ -180,57 +187,104 @@ export const Registration = z.object({ username: Username, email: Email, passwor
 /** Sign in with either the username or the email. */
 export const Credentials = z.object({ username: z.string().trim().toLowerCase().min(1).max(254), password: z.string().max(200) });
 export const Verification = z.object({ email: Email, code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code from the email.") });
+export const PasswordReset = Verification.extend({ password: Password });
 
 const codeHashOf = (email: string, code: string) => createHmac("sha256", SECRET).update(`verify:${email}:${code}`).digest("hex");
+const codeWait = (code: Code) => Math.ceil((code.sentAt + RESEND_SECONDS * 1000 - Date.now()) / 1000);
 
-/** Sends a fresh code for a pending registration; the code itself is only ever stored hashed. */
-async function sendCode(pending: Omit<Pending, "codeHash" | "expires" | "tries" | "sentAt">) {
+/** Stores a fresh code for `record` and emails it; the code itself is only ever stored hashed. */
+async function issueCode<T extends Code>(
+  store: ReturnType<typeof codeStore<T>>,
+  record: Omit<T, keyof Code> & { email: string },
+  email: (to: string, code: string) => EmailMessage,
+) {
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-  const next: Pending = { ...pending, codeHash: codeHashOf(pending.email, code), expires: Date.now() + CODE_MINUTES * 60_000, tries: 0, sentAt: Date.now() };
-  await savePending(next);
+  const next = { ...record, codeHash: codeHashOf(record.email, code), expires: Date.now() + CODE_MINUTES * 60_000, tries: 0, sentAt: Date.now() } as T;
+  await store.save(next);
   try {
-    await sendEmail(verificationEmail(pending.email, code));
+    await sendEmail(email(record.email, code));
   } catch (err) {
-    console.error("[auth] could not send verification email", err);
-    await dropPending(pending.email);
-    return { error: "We couldn't send the verification email. Try again in a moment." } as const;
+    console.error("[auth] could not send email", err);
+    await store.drop(record.email);
+    return {
+      error: emailMode === "off" ? "Email isn't set up on this server yet, so we can't send codes." : "We couldn't send the email. Try again in a moment.",
+    } as const;
   }
-  return { pending: { email: pending.email } } as const;
+  return { ok: true } as const;
 }
+
+/** Checks a typed code against its record, counting wrong tries; undefined when it matches. */
+async function checkCode<T extends Code>(store: ReturnType<typeof codeStore<T>>, record: T, code: string) {
+  if (record.expires < Date.now()) return "That code has expired. Send a new one.";
+  if (record.tries >= CODE_TRIES) return "Too many wrong codes. Send a new one.";
+  if (timingSafeEqual(Buffer.from(codeHashOf(record.email, code), "hex"), Buffer.from(record.codeHash, "hex"))) return;
+  await store.save({ ...record, tries: record.tries + 1 });
+  return "That code isn't right. Check the email and try again.";
+}
+
+/** Shown when the email is already in use, without saying so. */
+const ACCOUNT_ERROR = "There was an error making this account. Try again, or sign in if you already have one.";
 
 /** Step one of sign-up: checks the details are free, then emails a code. No account exists yet. */
 export async function signUp(input: z.infer<typeof Registration>) {
   if (await findUser(input.username)) return { error: "That username is taken." } as const;
-  if (await findUserByEmail(input.email)) return { error: "That email already has an account. Sign in instead." } as const;
+  // Deliberately vague: saying the email is taken would reveal who uses nodepad.
+  if (await findUserByEmail(input.email)) return { error: ACCOUNT_ERROR } as const;
   const salt = randomBytes(16).toString("hex");
-  return sendCode({ email: input.email, username: input.username, name: input.name || input.username, salt, hash: hashOf(input.password, salt) });
+  const record = { email: input.email, username: input.username, name: input.name || input.username, salt, hash: hashOf(input.password, salt) };
+  const sent = await issueCode(pendings, record, verificationEmail);
+  return "error" in sent ? sent : ({ pending: { email: input.email } } as const);
 }
 
-/** Sends a new code for a pending registration, at most once every RESEND_SECONDS. */
+/** Sends a new sign-up code, at most once every RESEND_SECONDS. */
 export async function resendCode(email: string) {
-  const pending = await findPending(email);
+  const pending = await pendings.find(email);
   if (!pending) return { error: "That sign-up has expired. Start again." } as const;
-  const wait = Math.ceil((pending.sentAt + RESEND_SECONDS * 1000 - Date.now()) / 1000);
+  const wait = codeWait(pending);
   if (wait > 0) return { error: `Wait ${wait} seconds before asking for another code.` } as const;
-  return sendCode(pending);
+  const sent = await issueCode(pendings, pending, verificationEmail);
+  return "error" in sent ? sent : ({ pending: { email } } as const);
 }
 
 /** Step two of sign-up: a matching code turns the pending registration into an account and signs it in. */
 export async function verify(input: z.infer<typeof Verification>) {
-  const pending = await findPending(input.email);
+  const pending = await pendings.find(input.email);
   if (!pending) return { error: "That sign-up has expired. Start again." } as const;
-  if (pending.expires < Date.now()) return { error: "That code has expired. Send a new one." } as const;
-  if (pending.tries >= CODE_TRIES) return { error: "Too many wrong codes. Send a new one." } as const;
-  const given = Buffer.from(codeHashOf(input.email, input.code), "hex");
-  if (!timingSafeEqual(given, Buffer.from(pending.codeHash, "hex"))) {
-    await savePending({ ...pending, tries: pending.tries + 1 });
-    return { error: "That code isn't right. Check the email and try again." } as const;
-  }
+  const wrong = await checkCode(pendings, pending, input.code);
+  if (wrong) return { error: wrong } as const;
   const user = { id: `acct-${randomUUID()}`, username: pending.username, name: pending.name, salt: pending.salt, hash: pending.hash, email: pending.email, createdAt: Date.now() };
   const taken = await addUser(user);
-  await dropPending(pending.email);
+  await pendings.drop(pending.email);
   if (taken === "username") return { error: "That username was taken while you were verifying. Start again with another." } as const;
-  if (taken === "email") return { error: "That email already has an account. Sign in instead." } as const;
+  if (taken === "email") return { error: ACCOUNT_ERROR } as const;
+  return { account: publicOf(user), token: startSession(publicOf(user)) } as const;
+}
+
+/**
+ * Forgot password, step one: emails a code if an account uses this address. The answer is the same either way,
+ * so this can't be used to find out which emails have accounts.
+ */
+export async function forgotPassword(email: string) {
+  const existing = await resets.find(email);
+  const wait = existing ? codeWait(existing) : 0;
+  if (wait > 0) return { error: `Wait ${wait} seconds before asking for another code.` } as const;
+  if (!(await findUserByEmail(email))) return { ok: true } as const;
+  return issueCode(resets, { email }, resetEmail);
+}
+
+/** Forgot password, step two: a matching code sets the new password, ends older sessions and signs in here. */
+export async function resetPassword(input: z.infer<typeof PasswordReset>) {
+  const record = await resets.find(input.email);
+  if (!record) return { error: "That code has expired. Send a new one." } as const;
+  const wrong = await checkCode(resets, record, input.code);
+  if (wrong) return { error: wrong } as const;
+  const user = await findUserByEmail(input.email);
+  await resets.drop(input.email);
+  if (!user) return { error: "That account no longer exists." } as const;
+  user.salt = randomBytes(16).toString("hex");
+  user.hash = hashOf(input.password, user.salt);
+  user.passwordAt = Date.now();
+  await saveUser(user);
   return { account: publicOf(user), token: startSession(publicOf(user)) } as const;
 }
 
@@ -265,7 +319,10 @@ export async function accountOf(token: string | undefined): Promise<Account | un
   if (!payload.success || payload.data.exp < Date.now()) return undefined;
   // Matching the id too, so a token outlives neither a deleted account nor a new one that reuses its username.
   const user = await findUser(payload.data.username);
-  return user?.id === payload.data.id ? publicOf(user) : undefined;
+  if (user?.id !== payload.data.id) return undefined;
+  // Started before the latest password change (the token's start is its expiry minus the session length).
+  if (user.passwordAt && payload.data.exp - SESSION_MS < user.passwordAt) return undefined;
+  return publicOf(user);
 }
 
 /** Renames the account and returns a fresh token carrying the new name. */

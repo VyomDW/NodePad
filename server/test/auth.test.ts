@@ -44,7 +44,9 @@ test("sign in works with the username or the email", async () => {
 
 test("a taken username or email is refused before any code is sent", async () => {
   assert.ok("error" in (await auth.signUp(details("ada"))));
-  assert.ok("error" in (await auth.signUp(auth.Registration.parse({ username: "grace", email: "ADA@example.com", password: "hunter22" }))));
+  const taken = await auth.signUp(auth.Registration.parse({ username: "grace", email: "ADA@example.com", password: "hunter22" }));
+  // The message must not reveal that the email has an account.
+  assert.ok("error" in taken && !/email|already has/i.test(taken.error));
 });
 
 test("codes lock after five wrong tries and resends are rate limited", async () => {
@@ -67,4 +69,28 @@ test("a session for an account that no longer exists is rejected", async () => {
   // Same username, different account: as if ada were deleted and the name signed up again.
   assert.equal(await auth.accountOf(auth.renewSession({ ...done.account, id: "acct-gone" })), undefined);
   assert.equal(await auth.accountOf(auth.renewSession({ id: "acct-x", username: "nobody", name: "Nobody" })), undefined);
+});
+
+test("forgot password emails a code, and the reset signs in and ends older sessions", async () => {
+  const before = await auth.signIn({ username: "ada", password: "hunter22" });
+  assert.ok("token" in before);
+
+  assert.deepEqual(await auth.forgotPassword("ada@example.com"), { ok: true });
+  const code = lastCode("ada@example.com");
+  assert.ok("error" in (await auth.resetPassword({ email: "ada@example.com", code: wrong(code), password: "new-secret" })));
+  const done = await auth.resetPassword({ email: "ada@example.com", code, password: "new-secret" });
+  assert.ok("token" in done);
+
+  assert.equal(await auth.accountOf(before.token), undefined);
+  assert.equal((await auth.accountOf(done.token))?.username, "ada");
+  assert.ok("error" in (await auth.signIn({ username: "ada", password: "hunter22" })));
+  assert.ok("token" in (await auth.signIn({ username: "ada", password: "new-secret" })));
+  // The code is single use.
+  assert.ok("error" in (await auth.resetPassword({ email: "ada@example.com", code, password: "another-one" })));
+});
+
+test("forgot password answers the same for unknown emails and sends nothing", async () => {
+  const sent = loggedEmails.length;
+  assert.deepEqual(await auth.forgotPassword("nobody@example.com"), { ok: true });
+  assert.equal(loggedEmails.length, sent);
 });

@@ -49,15 +49,32 @@ export async function sendEmail(email: Email) {
   }
 }
 
-export function verificationEmail(to: string, code: string): Email {
+/** Can this server send email? The mode, and for SMTP whether it can sign in (nothing is sent). */
+export async function diagnoseEmail() {
+  if (!smtp) return { mode: emailMode, from: env.emailFrom };
+  try {
+    await smtp.verify();
+    return { mode: emailMode, from: env.emailFrom, login: "ok" };
+  } catch (err) {
+    return { mode: emailMode, from: env.emailFrom, login: "failed", error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function codeEmail(to: string, code: string, subject: string, lead: string, ignore: string): Email {
   return {
     to,
-    subject: `${code} is your nodepad code`,
-    text: `Your nodepad verification code is ${code}.\n\nIt expires in 10 minutes. If you didn't try to make a nodepad account, you can ignore this email.`,
+    subject,
+    text: `${lead} ${code}.\n\nIt expires in 10 minutes. ${ignore}`,
     html: `<div style="font-family:system-ui,sans-serif;max-width:420px">
-  <p>Your nodepad verification code is</p>
+  <p>${lead}</p>
   <p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:12px 0">${code}</p>
-  <p style="color:#666">It expires in 10 minutes. If you didn't try to make a nodepad account, you can ignore this email.</p>
+  <p style="color:#666">It expires in 10 minutes. ${ignore}</p>
 </div>`,
   };
 }
+
+export const verificationEmail = (to: string, code: string) =>
+  codeEmail(to, code, `${code} is your nodepad code`, "Your nodepad verification code is", "If you didn't try to make a nodepad account, you can ignore this email.");
+
+export const resetEmail = (to: string, code: string) =>
+  codeEmail(to, code, `${code} is your nodepad password reset code`, "Your nodepad password reset code is", "If you didn't ask to reset your password, you can ignore this email; your password stays the same.");

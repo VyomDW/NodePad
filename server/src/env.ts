@@ -25,7 +25,8 @@ export const env = {
   smtpHost: process.env.SMTP_HOST ?? "",
   smtpPort: Number(process.env.SMTP_PORT || 587),
   smtpUser: process.env.SMTP_USER ?? "",
-  smtpPass: process.env.SMTP_PASS ?? "",
+  // Google shows app passwords in groups of four; the spaces are not part of it.
+  smtpPass: (process.env.SMTP_PASS ?? "").replace(/\s+/g, ""),
   resendApiKey: process.env.RESEND_API_KEY ?? "",
   emailFrom: process.env.EMAIL_FROM || process.env.SMTP_USER || "nodepad <onboarding@resend.dev>",
 };
