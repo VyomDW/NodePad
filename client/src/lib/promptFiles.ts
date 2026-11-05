@@ -44,7 +44,8 @@ const FILES: FileKind[] = [
 /** Where prompts sit, as fractions of the screen, keeping clear of the sheet in the middle. */
 const SLOTS = {
   wide: [[0.14, 0.12], [0.39, 0.075], [0.65, 0.08], [0.87, 0.15], [0.12, 0.36], [0.88, 0.4], [0.13, 0.6], [0.87, 0.64], [0.14, 0.87], [0.38, 0.93], [0.63, 0.93], [0.87, 0.88]],
-  tall: [[0.28, 0.06], [0.72, 0.1], [0.5, 0.175], [0.28, 0.82], [0.72, 0.865], [0.45, 0.94]],
+  // Phones alternate left and right so an open file doesn't land on the prompt below it.
+  tall: [[0.27, 0.07], [0.73, 0.125], [0.3, 0.19], [0.72, 0.83], [0.28, 0.89], [0.72, 0.955]],
 };
 
 function rr(ctx: Ctx, x: number, y: number, w: number, h: number, r: number) {
@@ -571,9 +572,9 @@ export function mountPromptFiles(canvas: HTMLCanvasElement): () => void {
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const tall = h > w;
-    fs = tall ? Math.min(14, w * 0.033) : Math.min(17, Math.max(11, w * 0.0118));
-    const maxW = tall ? w * 0.42 : Math.min(260, w * 0.17);
-    fw = tall ? w * 0.46 : Math.min(260, Math.max(170, w * 0.16));
+    fs = tall ? Math.min(11.5, w * 0.028) : Math.min(17, Math.max(11, w * 0.0118));
+    const maxW = tall ? w * 0.36 : Math.min(260, w * 0.17);
+    fw = tall ? w * 0.36 : Math.min(260, Math.max(170, w * 0.16));
     fh = fw * 0.68;
     ctx.font = `500 ${fs}px ${FONT}`;
     const old = prompts;
@@ -616,13 +617,14 @@ export function mountPromptFiles(canvas: HTMLCanvasElement): () => void {
       pr.rot = Math.sin(t * 0.8 + pr.phase * 0.7) * 0.045;
     }
 
-    // Prompts take turns becoming their files: a new one every couple of seconds, at most two at once.
+    // Prompts take turns becoming their files: a new one every couple of seconds, at most two at once
+    // (one on phones, where there's no room for two).
     // Nothing new starts while someone is typing in the form, so it doesn't pull their eye.
     const typing = performance.now() - lastKey < 2500;
     if (t > nextAuto && !typing) {
       const showing = prompts.filter((p) => p.auto > t).length;
       const idle = prompts.filter((p) => p.auto <= t && p.p === 0);
-      if (showing < 2 && idle.length) idle[Math.floor(Math.random() * idle.length)].auto = t + 3.4;
+      if (showing < (h > w ? 1 : 2) && idle.length) idle[Math.floor(Math.random() * idle.length)].auto = t + 3.4;
       nextAuto = t + 1.9;
     }
 
