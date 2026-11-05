@@ -99,7 +99,7 @@ export function SignIn({ invited }: { invited?: boolean }) {
     <div className="ink">
       <div className="stage-bg grid min-h-dvh place-items-center p-4 font-ui text-ink">
         <AuthBackdrop />
-        <form onSubmit={submit} className="ink-page relative z-10 w-full max-w-sm space-y-5 rounded-xl px-6 pb-6 pt-8">
+        <form onSubmit={submit} className="ink-page taped relative z-10 w-full max-w-sm space-y-5 rounded-xl px-6 pb-6 pt-8">
           <div className="flex items-center gap-2">
             <Logo />
             <span className="text-[19px] font-bold">nodepad</span>
