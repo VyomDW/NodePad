@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { forgotPassword, resendCode, resetPassword, signIn, signUp, verifyEmail } from "@/lib/auth";
 import { MAX_NAME } from "@/lib/identity";
 import { cn } from "@/lib/utils";
+import { AuthBackdrop } from "./AuthBackdrop";
 import { Logo } from "./Logo";
 
 /**
@@ -97,7 +98,8 @@ export function SignIn({ invited }: { invited?: boolean }) {
   return (
     <div className="ink">
       <div className="stage-bg grid min-h-dvh place-items-center p-4 font-ui text-ink">
-        <form onSubmit={submit} className="ink-page taped w-full max-w-sm space-y-5 rounded-xl px-6 pb-6 pt-8">
+        <AuthBackdrop />
+        <form onSubmit={submit} className="ink-page relative z-10 w-full max-w-sm space-y-5 rounded-xl px-6 pb-6 pt-8">
           <div className="flex items-center gap-2">
             <Logo />
             <span className="text-[19px] font-bold">nodepad</span>
